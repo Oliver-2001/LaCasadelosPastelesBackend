@@ -78,8 +78,8 @@ def protected():
 @app.route('/modulos', methods=['GET'])
 @jwt_required()
 def obtener_modulos():
-    current_user_id = get_jwt_identity()  # Obtén el ID del usuario del token
-    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()  # Busca el usuario por su ID
+    current_user_id = get_jwt_identity() 
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()  
 
     if not usuario:
         return jsonify({"message": "Usuario no encontrado"}), 404
@@ -91,7 +91,30 @@ def obtener_modulos():
 
     return jsonify(modulos_list), 200
 
+
+
+# Ruta para obtener todos los usuarios (solo accesible por admins)
+@app.route('/usuarios', methods=['GET'])
+@jwt_required()
+def obtener_usuarios():
+    current_user_id = get_jwt_identity()
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    if usuario.id_rol != 1:  
+        return jsonify({"message": "No tienes permisos para acceder a esta información"}), 403
+
+    # Obtener todos los usuarios
+    usuarios = Usuario.query.all()
+    usuarios_list = [{"id_usuario": u.id_usuario, "nombre": u.nombre, "usuario": u.usuario, "rol": u.id_rol} for u in usuarios]
+
+    return jsonify(usuarios_list), 200
+
+
+
 if __name__ == "__main__":
     with app.app_context():
-        db.create_all()  # Crear tablas si no existen
+        db.create_all()  
     app.run(debug=True)
