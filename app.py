@@ -3,7 +3,7 @@ from flask_jwt_extended import JWTManager, create_access_token
 from flask_jwt_extended import jwt_required
 from flask_jwt_extended import get_jwt_identity
 from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
-from models import db, Usuario  # Importa tu base de datos y modelo de usuario
+from models import db, Usuario, Rol, Modulo, RolModulo  # Importa tu base de datos y modelo de usuario
 from werkzeug.security import check_password_hash
 from flask_cors import CORS
 
@@ -13,7 +13,8 @@ CORS(app, origins="http://localhost:3000")
 # Configuración de la base de datos
 app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = "tu_clave_secreta"
+app.config["SECRET_KEY"] = "Or005836434*"
+app.config["JWT_SECRET_KEY"] = "OR005836434*"
 
 # Inicialización de la base de datos y JWT
 db.init_app(app)
@@ -53,15 +54,18 @@ def login():
     usuario = data.get('usuario')
     contrasena = data.get('contrasena')
 
-    # Buscar el usuario en la base de datos
     user = Usuario.query.filter_by(usuario=usuario).first()
 
     if user and check_password_hash(user.contrasena, contrasena):
-        # Login exitoso
-        return jsonify({"message": "Login exitoso"})
+        # ✅ Genera el token JWT
+        token = create_access_token(identity=str(user.id_usuario))  # Guarda el ID del usuario en el token
+        return jsonify({
+            "message": "Login exitoso",
+            "token": token
+        }), 200
     else:
-        # Usuario o contraseña incorrectos
         return jsonify({"message": "Usuario o contraseña incorrectos"}), 401
+    
 
 # Ruta protegida (requiere autenticación)
 @app.route("/protected", methods=["GET"])
@@ -70,6 +74,22 @@ def protected():
     current_user = get_jwt_identity()
     return jsonify(message=f"Hola, {current_user}! Esta es una ruta protegida."), 200
 
+# Ruta para obtener los modulos del usuario autenticado
+@app.route('/modulos', methods=['GET'])
+@jwt_required()
+def obtener_modulos():
+    current_user_id = get_jwt_identity()  # Obtén el ID del usuario del token
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()  # Busca el usuario por su ID
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    # Obtener los módulos a los que el usuario tiene acceso
+    modulos = Modulo.query.join(RolModulo).filter(RolModulo.id_rol == usuario.id_rol).all()
+
+    modulos_list = [{"id_modulo": modulo.id_modulo, "nombre": modulo.nombre, "descripcion": modulo.descripcion} for modulo in modulos]
+
+    return jsonify(modulos_list), 200
 
 if __name__ == "__main__":
     with app.app_context():
