@@ -3,8 +3,8 @@ from flask_jwt_extended import JWTManager, create_access_token
 from flask_jwt_extended import jwt_required
 from flask_jwt_extended import get_jwt_identity
 from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
-from models import db, Usuario, Rol, Modulo, RolModulo  # Importa tu base de datos y modelo de usuario
-from werkzeug.security import check_password_hash
+from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario  # Importa tu base de datos y modelo de usuario
+from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -26,28 +26,7 @@ jwt = JWTManager(app)
 def home():
     return jsonify(message="Bienvenido a la API de la pastelería"), 200
 
-
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.get_json()
-    usuario = data["usuario"]  # Cambiado de email a usuario
-    password = data["password"]
-
-    # Verificar si el usuario ya existe
-    existing_user = Usuario.query.filter_by(usuario=usuario).first()  # Cambiado de email a usuario
-    if existing_user:
-        return jsonify(message="El usuario ya existe"), 400
-
-    # Crear y guardar el nuevo usuario
-    new_user = Usuario(usuario=usuario)  # Cambiado de email a usuario
-    new_user.set_password(password)
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify(message="Usuario registrado exitosamente"), 201
-
-
-# Ruta de inicio de sesión
+# ############################################# Ruta de inicio de sesión #############################################
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -67,7 +46,7 @@ def login():
         return jsonify({"message": "Usuario o contraseña incorrectos"}), 401
     
 
-# Ruta protegida (requiere autenticación)
+############################################## Ruta protegida (requiere autenticación)#############################################
 @app.route("/protected", methods=["GET"])
 @jwt_required()
 def protected():
@@ -92,8 +71,7 @@ def obtener_modulos():
     return jsonify(modulos_list), 200
 
 
-
-# Ruta para obtener todos los usuarios (solo accesible por admins) (Modulo Admin de Usuarios)
+############################################## Ruta para obtener todos los usuarios (solo accesible por admins) (Modulo Admin de Usuarios) #############################################
 @app.route('/usuarios', methods=['GET'])
 @jwt_required()
 def obtener_usuarios():
@@ -112,7 +90,7 @@ def obtener_usuarios():
 
     return jsonify(usuarios_list), 200
 
-##### Ruta para eliminar usuarios (Modulo Admin de Usuarios)
+################################################## Ruta para eliminar usuarios (Modulo Admin de Usuarios) #############################################
 @app.route('/usuarios/<int:id_usuario>', methods=['DELETE'])
 @jwt_required()
 def eliminar_usuario(id_usuario):
@@ -138,7 +116,8 @@ def eliminar_usuario(id_usuario):
 
     return jsonify({"message": "Usuario eliminado correctamente"}), 200
 
-##### Ruta para eliminar usuarios (Modulo Admin de Usuarios)
+
+################################# Ruta para editar usuarios (Modulo Admin de Usuarios) #############################################
 @app.route('/usuarios/<int:id_usuario>', methods=['PUT'])
 @jwt_required()
 def editar_usuario(id_usuario):
@@ -148,7 +127,6 @@ def editar_usuario(id_usuario):
     if not usuario_actual:
         return jsonify({"message": "Usuario no encontrado"}), 404
 
-    # Verificar que el usuario tiene permisos para editar otros usuarios (solo superadmin puede)
     if usuario_actual.id_rol != 1:
         return jsonify({"message": "No tienes permisos para modificar usuarios"}), 403
 
@@ -156,26 +134,21 @@ def editar_usuario(id_usuario):
     if not usuario:
         return jsonify({"message": "Usuario no encontrado"}), 404
 
-    # Obtener los datos de la solicitud
     data = request.get_json()
     nombre = data.get("nombre")
     usuario_nombre = data.get("usuario")
     id_rol = data.get("id_rol")
 
-    # Validar que los campos necesarios no estén vacíos
     if not nombre or not usuario_nombre or not id_rol:
         return jsonify({"message": "Todos los campos son obligatorios"}), 400
 
-    # Validar que el rol sea uno de los valores permitidos
     if id_rol not in [1, 2, 3, 4]:
         return jsonify({"message": "Rol no válido"}), 400
 
-    # Verificar si el nombre de usuario ya existe
     usuario_existente = Usuario.query.filter_by(usuario=usuario_nombre).first()
     if usuario_existente and usuario_existente.id_usuario != id_usuario:
         return jsonify({"message": "El nombre de usuario ya está en uso"}), 400
 
-    # Actualizar los datos del usuario
     usuario.nombre = nombre
     usuario.usuario = usuario_nombre
     usuario.id_rol = id_rol
@@ -184,6 +157,97 @@ def editar_usuario(id_usuario):
 
     return jsonify({"message": "Usuario actualizado correctamente"}), 200
 
+######################################### Ruta para crear usuarios nuevos (Modulo Admin de Usuarios) #############################################
+@app.route('/api/usuarios', methods=['POST'])
+def crear_usuario():
+    data = request.get_json()
+
+    # Validar que se envíen todos los campos
+    if not data.get('nombre') or not data.get('usuario') or not data.get('contrasena') or not data.get('id_rol'):
+        return jsonify({'error': 'Faltan datos obligatorios'}), 400
+
+    # Verificar que el id_rol sea válido
+    rol = Rol.query.get(data['id_rol'])
+    if not rol:
+        return jsonify({'error': 'Rol no válido'}), 400
+
+    # Crear el nuevo usuario
+    nuevo_usuario = Usuario(
+        nombre=data['nombre'],
+        usuario=data['usuario'],
+        contrasena=generate_password_hash(data['contrasena']),
+        id_rol=data['id_rol']
+    )
+
+    try:
+        db.session.add(nuevo_usuario)
+        db.session.commit()
+        return jsonify({
+            'mensaje': 'Usuario creado con éxito',
+            'usuario': {
+                'id_usuario': nuevo_usuario.id_usuario,
+                'nombre': nuevo_usuario.nombre,
+                'usuario': nuevo_usuario.usuario,
+                'rol': rol.nombre_rol
+            }
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+    
+
+
+################################################################## Modulo Productos ##############################################################
+@app.route('/productos', methods=['GET'])
+@jwt_required()
+def obtener_productos():
+    current_user_id = get_jwt_identity()
+
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    # Obtener todos los productos
+    productos = Producto.query.all() 
+
+    productos_list = [
+        {
+            "id_producto": p.id_producto,
+            "nombre": p.nombre,
+            "precio": p.precio,
+            "stock": p.stock,
+            "categoria": p.categoria
+        } for p in productos
+    ]
+
+    return jsonify(productos_list), 200
+
+
+################################################################## Modulo Inventario ##############################################################
+@app.route('/inventario', methods=['GET'])
+@jwt_required()
+def obtener_inventario():
+    # Obtén el ID del usuario autenticado
+    current_user_id = get_jwt_identity()
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    # Obtener todos los registros de inventario sin el ID de insumo
+    inventarios = Inventario.query.all()
+    inventarios_list = [
+        {
+            "nombre": inventario.nombre,
+            "cantidad": inventario.cantidad,
+            "unidad": inventario.unidad,
+            "fecha_actualizacion": inventario.fecha_actualizacion,
+            "id_sucursal": inventario.id_sucursal
+        } for inventario in inventarios
+    ]
+
+    return jsonify(inventarios_list), 200
 
 if __name__ == "__main__":
     with app.app_context():

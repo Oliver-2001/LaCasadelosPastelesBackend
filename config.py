@@ -25,3 +25,4 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # Crear la instancia de SQLAlchemy
 db = SQLAlchemy()
+
