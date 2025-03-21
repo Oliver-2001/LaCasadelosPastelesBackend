@@ -93,7 +93,7 @@ def obtener_modulos():
 
 
 
-# Ruta para obtener todos los usuarios (solo accesible por admins)
+# Ruta para obtener todos los usuarios (solo accesible por admins) (Modulo Admin de Usuarios)
 @app.route('/usuarios', methods=['GET'])
 @jwt_required()
 def obtener_usuarios():
@@ -106,12 +106,83 @@ def obtener_usuarios():
     if usuario.id_rol != 1:  
         return jsonify({"message": "No tienes permisos para acceder a esta información"}), 403
 
-    # Obtener todos los usuarios
+    # Obtener todos los usuarios 
     usuarios = Usuario.query.all()
     usuarios_list = [{"id_usuario": u.id_usuario, "nombre": u.nombre, "usuario": u.usuario, "rol": u.id_rol} for u in usuarios]
 
     return jsonify(usuarios_list), 200
 
+##### Ruta para eliminar usuarios (Modulo Admin de Usuarios)
+@app.route('/usuarios/<int:id_usuario>', methods=['DELETE'])
+@jwt_required()
+def eliminar_usuario(id_usuario):
+    current_user_id = get_jwt_identity()
+    usuario_actual = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario_actual:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    if usuario_actual.id_rol != 1:  
+        return jsonify({"message": "No tienes permisos para eliminar usuarios"}), 403
+
+    usuario = Usuario.query.filter_by(id_usuario=id_usuario).first()
+
+    if not usuario:
+        return jsonify({"message": "El usuario no existe"}), 404
+
+    if usuario.id_rol == 1:
+        return jsonify({"message": "No se puede eliminar al Superadmin"}), 403
+
+    db.session.delete(usuario)
+    db.session.commit()
+
+    return jsonify({"message": "Usuario eliminado correctamente"}), 200
+
+##### Ruta para eliminar usuarios (Modulo Admin de Usuarios)
+@app.route('/usuarios/<int:id_usuario>', methods=['PUT'])
+@jwt_required()
+def editar_usuario(id_usuario):
+    current_user_id = get_jwt_identity()
+    usuario_actual = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario_actual:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    # Verificar que el usuario tiene permisos para editar otros usuarios (solo superadmin puede)
+    if usuario_actual.id_rol != 1:
+        return jsonify({"message": "No tienes permisos para modificar usuarios"}), 403
+
+    usuario = Usuario.query.filter_by(id_usuario=id_usuario).first()
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    # Obtener los datos de la solicitud
+    data = request.get_json()
+    nombre = data.get("nombre")
+    usuario_nombre = data.get("usuario")
+    id_rol = data.get("id_rol")
+
+    # Validar que los campos necesarios no estén vacíos
+    if not nombre or not usuario_nombre or not id_rol:
+        return jsonify({"message": "Todos los campos son obligatorios"}), 400
+
+    # Validar que el rol sea uno de los valores permitidos
+    if id_rol not in [1, 2, 3, 4]:
+        return jsonify({"message": "Rol no válido"}), 400
+
+    # Verificar si el nombre de usuario ya existe
+    usuario_existente = Usuario.query.filter_by(usuario=usuario_nombre).first()
+    if usuario_existente and usuario_existente.id_usuario != id_usuario:
+        return jsonify({"message": "El nombre de usuario ya está en uso"}), 400
+
+    # Actualizar los datos del usuario
+    usuario.nombre = nombre
+    usuario.usuario = usuario_nombre
+    usuario.id_rol = id_rol
+
+    db.session.commit()
+
+    return jsonify({"message": "Usuario actualizado correctamente"}), 200
 
 
 if __name__ == "__main__":
