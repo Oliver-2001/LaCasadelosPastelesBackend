@@ -16,7 +16,7 @@ class Usuario(db.Model):
     nombre = db.Column(db.String(100))
     usuario = db.Column(db.String(50), unique=True, nullable=False)
     contrasena = db.Column(db.String(200), nullable=False)
-    id_rol = db.Column(db.Integer, db.ForeignKey('Roles.id_rol'), nullable=False)  # Relación con 'Roles'
+    id_rol = db.Column(db.Integer, db.ForeignKey('Roles.id_rol'), nullable=False)
     
     # Relación con el rol
     rol = db.relationship('Rol', backref=db.backref('usuarios', lazy=True))
@@ -29,10 +29,11 @@ class Usuario(db.Model):
     def check_password(self, password):
         return check_password_hash(self.contrasena, password)
 
+
 class Rol(db.Model):
     __tablename__ = 'Roles'
     id_rol = db.Column(db.Integer, primary_key=True)
-    nombre_rol = db.Column(db.String(50), nullable=False)
+    nombre = db.Column(db.String(50), nullable=False)
 
 class Modulo(db.Model):
     __tablename__ = 'Modulos'

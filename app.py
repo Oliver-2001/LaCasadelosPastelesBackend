@@ -224,6 +224,65 @@ def obtener_productos():
     return jsonify(productos_list), 200
 
 
+
+##############(EDITAR) Modulo Productos #############################
+
+
+@app.route('/productos/<int:id_producto>', methods=['PUT'])
+@jwt_required()
+def editar_producto(id_producto):
+    current_user_id = get_jwt_identity()
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    if usuario.rol.nombre not in ['superadmin', 'admin']:  
+        return jsonify({"message": "No tiene permisos para editar productos"}), 403
+
+    producto = Producto.query.get(id_producto)
+    if not producto:
+        return jsonify({"message": "Producto no encontrado"}), 404
+
+    # Obtener los datos enviados en el cuerpo de la solicitud
+    data = request.get_json()
+
+    # Actualizar los campos del producto
+    producto.nombre = data.get('nombre', producto.nombre)
+    producto.precio = data.get('precio', producto.precio)
+    producto.stock = data.get('stock', producto.stock)
+    producto.categoria = data.get('categoria', producto.categoria)
+
+    db.session.commit()
+
+    return jsonify({"message": "Producto actualizado correctamente"}), 200
+
+
+##############(Eliminar) Modulo Productos ########################################
+
+@app.route('/productos/<int:id_producto>', methods=['DELETE'])
+@jwt_required()
+def eliminar_producto(id_producto):
+    current_user_id = get_jwt_identity()
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    # Accede a 'nombre_rol' ya que tu clase Rol tiene esa columna
+    if usuario.rol.nombre not in ['superadmin', 'admin']:  
+        return jsonify({"message": "No tiene permisos para eliminar productos"}), 403
+
+    producto = Producto.query.get(id_producto)
+    if not producto:
+        return jsonify({"message": "Producto no encontrado"}), 404
+
+    db.session.delete(producto)
+    db.session.commit()
+
+    return jsonify({"message": "Producto eliminado correctamente"}), 200
+
+
 ################################################################## Modulo Inventario ##############################################################
 @app.route('/inventario', methods=['GET'])
 @jwt_required()
