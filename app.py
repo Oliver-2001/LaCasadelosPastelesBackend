@@ -6,6 +6,8 @@ from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
 from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario  # Importa tu base de datos y modelo de usuario
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
+from datetime import datetime
+
 
 app = Flask(__name__)
 CORS(app, origins="http://localhost:3000")
@@ -284,6 +286,8 @@ def eliminar_producto(id_producto):
 
 
 ################################################################## Modulo Inventario ##############################################################
+
+
 @app.route('/inventario', methods=['GET'])
 @jwt_required()
 def obtener_inventario():
@@ -307,6 +311,42 @@ def obtener_inventario():
     ]
 
     return jsonify(inventarios_list), 200
+
+################## (Editar) Modulo Inventario ########################################
+
+@app.route('/inventario/<int:id_insumo>', methods=['PUT'])
+@jwt_required()
+def editar_inventario(id_insumo):
+    data = request.get_json()
+
+    inventario = Inventario.query.get(id_insumo)
+    if not inventario:
+        return jsonify({"message": "Insumo no encontrado"}), 404
+
+    # Validar y actualizar campos
+    inventario.nombre = data.get("nombre", inventario.nombre)
+    inventario.cantidad = data.get("cantidad", inventario.cantidad)
+    inventario.unidad = data.get("unidad", inventario.unidad)
+    inventario.fecha_actualizacion = datetime.utcnow()  # Actualizar la fecha
+
+    db.session.commit()
+    return jsonify({"message": "Insumo actualizado correctamente."}), 200
+
+
+################## (Eliminar) Modulo Inventario ########################################
+
+@app.route('/inventario/<int:id_insumo>', methods=['DELETE'])
+@jwt_required()
+def eliminar_inventario(id_insumo):
+    inventario = Inventario.query.get(id_insumo)
+    if not inventario:
+        return jsonify({"message": "Insumo no encontrado"}), 404
+
+    db.session.delete(inventario)
+    db.session.commit()
+
+    return jsonify({"message": "Insumo eliminado correctamente."}), 200
+
 
 if __name__ == "__main__":
     with app.app_context():
