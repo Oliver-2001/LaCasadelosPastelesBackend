@@ -160,7 +160,7 @@ def editar_usuario(id_usuario):
     return jsonify({"message": "Usuario actualizado correctamente"}), 200
 
 ######################################### Ruta para crear usuarios nuevos (Modulo Admin de Usuarios) #############################################
-@app.route('/api/usuarios', methods=['POST'])
+@app.route('/usuarios', methods=['POST'])
 def crear_usuario():
     data = request.get_json()
 
@@ -190,7 +190,7 @@ def crear_usuario():
                 'id_usuario': nuevo_usuario.id_usuario,
                 'nombre': nuevo_usuario.nombre,
                 'usuario': nuevo_usuario.usuario,
-                'rol': rol.nombre_rol
+                'rol': rol.nombre
             }
         }), 201
     except Exception as e:
@@ -298,10 +298,10 @@ def obtener_inventario():
     if not usuario:
         return jsonify({"message": "Usuario no encontrado"}), 404
 
-    # Obtener todos los registros de inventario sin el ID de insumo
     inventarios = Inventario.query.all()
     inventarios_list = [
         {
+            "id_insumo": inventario.id_insumo,  # Agregar el id_insumo
             "nombre": inventario.nombre,
             "cantidad": inventario.cantidad,
             "unidad": inventario.unidad,
