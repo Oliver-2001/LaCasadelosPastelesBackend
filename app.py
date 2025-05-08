@@ -403,6 +403,45 @@ def eliminar_inventario(id_insumo):
 
     return jsonify({"message": "Insumo eliminado correctamente."}), 200
 
+#################### (Crear) Modulo Inventario ########################################
+
+@app.route('/inventario', methods=['POST'])
+@jwt_required()
+def crear_insumo():
+    current_user_id = get_jwt_identity()
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    data = request.get_json()
+    nombre = data.get("nombre")
+    cantidad = data.get("cantidad")
+    unidad = data.get("unidad")
+    id_sucursal = data.get("id_sucursal")
+
+    # Validaciones básicas
+    if not all([nombre, cantidad, unidad, id_sucursal]):
+        return jsonify({"message": "Faltan datos requeridos"}), 400
+
+    # Verificar si ya existe un insumo con el mismo nombre en esa sucursal
+    insumo_existente = Inventario.query.filter_by(nombre=nombre, id_sucursal=id_sucursal).first()
+    if insumo_existente:
+        return jsonify({"message": f"El insumo '{nombre}' ya existe en esta sucursal"}), 409
+
+    nuevo_insumo = Inventario(
+        nombre=nombre,
+        cantidad=cantidad,
+        unidad=unidad,
+        id_sucursal=id_sucursal,
+        fecha_actualizacion=datetime.utcnow()
+    )
+
+    db.session.add(nuevo_insumo)
+    db.session.commit()
+
+    return jsonify({"message": "Insumo creado exitosamente"}), 201
+
 
 if __name__ == "__main__":
     with app.app_context():
