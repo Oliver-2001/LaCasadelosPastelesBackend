@@ -284,6 +284,62 @@ def eliminar_producto(id_producto):
 
     return jsonify({"message": "Producto eliminado correctamente"}), 200
 
+############################## (Crear) Modulo Productos ########################################
+
+@app.route('/productos', methods=['POST'])
+@jwt_required()
+def crear_producto():
+    current_user_id = get_jwt_identity()
+    usuario = Usuario.query.filter_by(id_usuario=current_user_id).first()
+
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado"}), 404
+
+    if usuario.rol.nombre not in ['superadmin', 'admin']:
+        return jsonify({"message": "No tiene permisos para crear productos"}), 403
+
+    data = request.get_json()
+
+    nombre = data.get('nombre')
+    precio = data.get('precio')
+    stock = data.get('stock')
+    categoria = data.get('categoria')
+
+    if not nombre or precio is None or stock is None or not categoria:
+        return jsonify({"message": "Faltan datos obligatorios"}), 400
+
+    # Verificar si ya existe un producto con el mismo nombre
+    producto_existente = Producto.query.filter_by(nombre=nombre).first()
+    if producto_existente:
+        return jsonify({"message": "Ya existe un producto con ese nombre"}), 409
+
+    nuevo_producto = Producto(
+        nombre=nombre,
+        precio=precio,
+        stock=stock,
+        categoria=categoria
+    )
+
+    try:
+        db.session.add(nuevo_producto)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Producto creado correctamente",
+            "producto": {
+                "id_producto": nuevo_producto.id_producto,
+                "nombre": nuevo_producto.nombre,
+                "precio": nuevo_producto.precio,
+                "stock": nuevo_producto.stock,
+                "categoria": nuevo_producto.categoria
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
 
 ################################################################## Modulo Inventario ##############################################################
 
