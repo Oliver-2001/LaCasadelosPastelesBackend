@@ -164,6 +164,8 @@ def editar_usuario(id_usuario):
 def crear_usuario():
     data = request.get_json()
 
+    print("Datos recibidos:", data)  # Depuración: Ver lo que se está recibiendo
+
     # Validar que se envíen todos los campos
     if not data.get('nombre') or not data.get('usuario') or not data.get('contrasena') or not data.get('id_rol'):
         return jsonify({'error': 'Faltan datos obligatorios'}), 400
@@ -196,7 +198,6 @@ def crear_usuario():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
-    
 
 
 ################################################################## Modulo Productos ##############################################################
