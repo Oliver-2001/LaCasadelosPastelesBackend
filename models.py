@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime   
 
 db = SQLAlchemy()
 
@@ -82,3 +83,18 @@ class Inventario(db.Model):
         self.unidad = unidad
         self.fecha_actualizacion = fecha_actualizacion
         self.id_sucursal = id_sucursal
+
+class Venta(db.Model):
+    __tablename__ = 'Ventas'
+    id_venta = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.DateTime, default=datetime.now)
+    total = db.Column(db.Float)
+    id_usuario = db.Column(db.Integer, nullable=False)
+
+class DetalleVenta(db.Model):
+    __tablename__ = 'DetallesVenta'
+    id_detalle = db.Column(db.Integer, primary_key=True)
+    id_venta = db.Column(db.Integer, db.ForeignKey('Ventas.id_venta'), nullable=False)
+    id_producto = db.Column(db.Integer, db.ForeignKey('Productos.id_producto'), nullable=False)
+    cantidad = db.Column(db.Integer, nullable=False)
+    subtotal = db.Column(db.Float)

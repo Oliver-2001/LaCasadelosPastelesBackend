@@ -3,7 +3,7 @@ from flask_jwt_extended import JWTManager, create_access_token
 from flask_jwt_extended import jwt_required
 from flask_jwt_extended import get_jwt_identity
 from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
-from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario  # Importa tu base de datos y modelo de usuario
+from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario, Venta, DetalleVenta # Importa tu base de datos y modelo de usuario
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
 from datetime import datetime
@@ -443,6 +443,137 @@ def crear_insumo():
 
     return jsonify({"message": "Insumo creado exitosamente"}), 201
 
+############################################ (Crear) Modulo VENTAS #####################################################
+
+@app.route('/ventas', methods=['POST'])
+def crear_venta():
+    try:
+        data = request.json
+        detalles = data.get('detalles', [])
+        id_usuario = data.get('id_usuario')
+
+        if not detalles or not id_usuario:
+            return jsonify({'mensaje': 'Faltan datos obligatorios (detalles o id_usuario).'}), 400
+
+        total = 0
+        detalles_venta = []
+
+        for item in detalles:
+            id_producto = item['id_producto']
+            cantidad = item['cantidad']
+
+            producto = Producto.query.get(id_producto)
+            if not producto:
+                return jsonify({'mensaje': f'Producto con id {id_producto} no encontrado.'}), 404
+
+            if producto.stock < cantidad:
+                return jsonify({'mensaje': f'Stock insuficiente para producto {producto.nombre}.'}), 400
+
+            subtotal = producto.precio * cantidad
+            total += subtotal
+
+            # Preparar detalle
+            detalle = DetalleVenta(
+                id_producto=id_producto,
+                cantidad=cantidad,
+                subtotal=subtotal
+            )
+            detalles_venta.append(detalle)
+
+            # Actualizar stock
+            producto.stock -= cantidad
+
+        # Crear la venta
+        venta = Venta(
+            fecha=datetime.now(),
+            total=total,
+            id_usuario=id_usuario
+        )
+        db.session.add(venta)
+        db.session.flush()  # Para obtener el id_venta antes de hacer commit
+
+        # Asociar detalles a la venta
+        for detalle in detalles_venta:
+            detalle.id_venta = venta.id_venta
+            db.session.add(detalle)
+
+        db.session.commit()
+        return jsonify({'mensaje': 'Venta registrada correctamente', 'id_venta': venta.id_venta}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+    
+
+############################################ LISTAR VENTAS #####################################################
+@app.route('/ventas', methods=['GET'])
+def listar_ventas():
+    try:
+        # Parámetros opcionales
+        fecha_str = request.args.get('fecha')
+        id_usuario = request.args.get('id_usuario')
+
+        query = Venta.query
+
+        if fecha_str:
+            try:
+                fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+                query = query.filter(db.func.cast(Venta.fecha, db.Date) == fecha)
+            except ValueError:
+                return jsonify({'error': 'Formato de fecha inválido. Usa YYYY-MM-DD'}), 400
+
+        if id_usuario:
+            query = query.filter(Venta.id_usuario == int(id_usuario))
+
+        ventas = query.all()
+
+        resultado = [
+            {
+                'id_venta': venta.id_venta,
+                'fecha': venta.fecha.strftime('%Y-%m-%d %H:%M:%S'),
+                'total': venta.total,
+                'id_usuario': venta.id_usuario
+            }
+            for venta in ventas
+        ]
+
+        return jsonify(resultado), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+############################################ LISTAR DETALLES DE VENTA #####################################################
+@app.route('/ventas/<int:id_venta>', methods=['GET'])
+def obtener_detalle_venta(id_venta):
+    try:
+        venta = Venta.query.get(id_venta)
+        if not venta:
+            return jsonify({'mensaje': f'No se encontró la venta con ID {id_venta}'}), 404
+
+        detalles = DetalleVenta.query.filter_by(id_venta=id_venta).all()
+
+        detalle_items = []
+        for detalle in detalles:
+            producto = Producto.query.get(detalle.id_producto)
+            detalle_items.append({
+                'id_producto': detalle.id_producto,
+                'nombre_producto': producto.nombre if producto else 'Desconocido',
+                'cantidad': detalle.cantidad,
+                'subtotal': detalle.subtotal
+            })
+
+        resultado = {
+            'id_venta': venta.id_venta,
+            'fecha': venta.fecha.strftime('%Y-%m-%d %H:%M:%S'),
+            'total': venta.total,
+            'id_usuario': venta.id_usuario,
+            'detalles': detalle_items
+        }
+
+        return jsonify(resultado), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
     with app.app_context():
