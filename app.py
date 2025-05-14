@@ -624,6 +624,24 @@ def agregar_sucursal():
 
     return jsonify({'message': 'Sucursal agregada exitosamente'}), 201
 
+############################################ (Eliminar) Modulo Sucursales #####################################################
+
+@app.route('/sucursales/<int:id_sucursal>', methods=['DELETE'])
+def eliminar_sucursal(id_sucursal):
+    sucursal = Sucursal.query.get(id_sucursal)
+
+    if not sucursal:
+        return jsonify({'error': 'Sucursal no encontrada'}), 404
+
+    try:
+        db.session.delete(sucursal)
+        db.session.commit()
+        return jsonify({'message': 'Sucursal eliminada exitosamente'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print('Error al eliminar sucursal:', e)
+        return jsonify({'error': 'No se pudo eliminar la sucursal'}), 500
+
 
 if __name__ == "__main__":
     with app.app_context():
