@@ -3,7 +3,7 @@ from flask_jwt_extended import JWTManager, create_access_token
 from flask_jwt_extended import jwt_required
 from flask_jwt_extended import get_jwt_identity
 from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
-from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario, Venta, DetalleVenta # Importa tu base de datos y modelo de usuario
+from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario, Venta, DetalleVenta, Sucursal # Importa tu base de datos y modelo de usuario
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
 from datetime import datetime
@@ -574,6 +574,56 @@ def obtener_detalle_venta(id_venta):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+
+################################################################## Modulo Sucursales ##############################################################
+
+@app.route('/sucursales', methods=['GET'])
+def obtener_sucursales():
+    sucursales = Sucursal.query.all()
+    resultado = []
+    for sucursal in sucursales:
+        resultado.append({
+            'id_sucursal': sucursal.id_sucursal,
+            'nombre': sucursal.nombre,
+            'direccion': sucursal.direccion,
+            'latitud': sucursal.latitud,
+            'longitud': sucursal.longitud
+        })
+    return jsonify(resultado)
+
+############################################ (Crear) Modulo Sucursales #####################################################
+@app.route('/sucursales', methods=['POST'])
+def agregar_sucursal():
+    data = request.get_json()
+
+    nombre = data.get('nombre')
+    direccion = data.get('direccion')
+    latitud = data.get('latitud')
+    longitud = data.get('longitud')
+
+    if not all([nombre, direccion, latitud, longitud]):
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+
+    try:
+        latitud = float(latitud)
+        longitud = float(longitud)
+    except ValueError:
+        return jsonify({'error': 'Latitud y longitud deben ser numéricos'}), 400
+
+    nueva_sucursal = Sucursal(
+        nombre=nombre,
+        direccion=direccion,
+        latitud=latitud,
+        longitud=longitud
+    )
+
+    db.session.add(nueva_sucursal)
+    db.session.commit()
+
+    return jsonify({'message': 'Sucursal agregada exitosamente'}), 201
+
 
 if __name__ == "__main__":
     with app.app_context():

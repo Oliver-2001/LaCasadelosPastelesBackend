@@ -98,3 +98,15 @@ class DetalleVenta(db.Model):
     id_producto = db.Column(db.Integer, db.ForeignKey('Productos.id_producto'), nullable=False)
     cantidad = db.Column(db.Integer, nullable=False)
     subtotal = db.Column(db.Float)
+
+class Sucursal(db.Model):
+    __tablename__ = 'Sucursales'
+
+    id_sucursal = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    direccion = db.Column(db.String(200), nullable=False)
+    latitud = db.Column(db.Float, nullable=True)   # puede venir en blanco
+    longitud = db.Column(db.Float, nullable=True)
+
+    def __repr__(self):
+        return f"<Sucursal {self.nombre}>"
