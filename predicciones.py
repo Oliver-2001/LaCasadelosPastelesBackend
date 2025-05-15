@@ -13,15 +13,16 @@ logger = logging.getLogger(__name__)
 
 def obtener_datos_ventas():
     query = text("""
-        SELECT 
-            dv.id_producto,
-            CONVERT(date, v.fecha) AS fecha,
-            SUM(dv.cantidad) AS cantidad_vendida
-        FROM DetallesVenta dv
-        JOIN Ventas v ON dv.id_venta = v.id_venta
-        GROUP BY dv.id_producto, CONVERT(date, v.fecha)
-        ORDER BY dv.id_producto, fecha;
-    """)
+    SELECT 
+        p.id_producto,
+        p.nombre AS nombre_producto,
+        pi.fecha_prediccion,
+        pi.cantidad_prediccion
+    FROM PrediccionesIA pi
+    JOIN Productos p ON pi.id_producto = p.id_producto
+    WHERE pi.id_sucursal = :id_sucursal
+    ORDER BY pi.fecha_prediccion ASC
+""")
     result = db.session.execute(query)
     rows = result.fetchall()
     return pd.DataFrame(rows, columns=['id_producto', 'fecha', 'cantidad_vendida'])

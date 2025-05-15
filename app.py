@@ -666,8 +666,17 @@ def obtener_predicciones():
     fecha_inicio = request.args.get('fecha_inicio')
     fecha_fin = request.args.get('fecha_fin')
 
-    query = db.session.query(PrediccionesIA).filter_by(id_sucursal=id_sucursal)
-
+    query = (
+    db.session.query(
+        PrediccionesIA.id_producto,
+        Producto.nombre.label("nombre_producto"),
+        PrediccionesIA.fecha_prediccion,
+        PrediccionesIA.cantidad_prediccion,
+        PrediccionesIA.id_sucursal
+    )
+    .join(Producto, Producto.id_producto == PrediccionesIA.id_producto)
+    .filter(PrediccionesIA.id_sucursal == id_sucursal)
+)
     if id_producto:
         query = query.filter(PrediccionesIA.id_producto == id_producto)
 
@@ -690,11 +699,14 @@ def obtener_predicciones():
     resultado = []
     for p in predicciones:
         resultado.append({
-            "id_producto": p.id_producto,
-            "fecha_prediccion": p.fecha_prediccion.strftime('%Y-%m-%d'),
-            "cantidad_prediccion": p.cantidad_prediccion,
-            "id_sucursal": p.id_sucursal
-        })
+        "id_producto": p.id_producto,
+        "nombre_producto": p.nombre_producto,
+        "fecha_prediccion": p.fecha_prediccion.strftime('%Y-%m-%d'),
+        "cantidad_prediccion": float(p.cantidad_prediccion) if p.cantidad_prediccion is not None else 0,
+        "id_sucursal": p.id_sucursal
+    })
+
+
 
     return jsonify(resultado)
 

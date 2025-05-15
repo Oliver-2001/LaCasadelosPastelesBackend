@@ -61,6 +61,8 @@ class Producto(db.Model):
     stock = db.Column(db.Integer, nullable=False)
     categoria = db.Column(db.String(50), nullable=False)
 
+    predicciones = db.relationship('PrediccionesIA', back_populates='producto')
+
     def __init__(self, nombre, precio, stock, categoria):
         self.nombre = nombre
         self.precio = precio
@@ -108,6 +110,9 @@ class Sucursal(db.Model):
     latitud = db.Column(db.Float, nullable=True)   # puede venir en blanco
     longitud = db.Column(db.Float, nullable=True)
 
+    # Relación con predicciones
+    predicciones = db.relationship('PrediccionesIA', back_populates='sucursal')
+
     def __repr__(self):
         return f"<Sucursal {self.nombre}>"
     
@@ -116,7 +121,11 @@ class PrediccionesIA(db.Model):
     __tablename__ = 'PrediccionesIA'
 
     id_prediccion = db.Column(db.Integer, primary_key=True)
-    id_producto = db.Column(db.Integer)
-    fecha_prediccion = db.Column(db.Date)
-    cantidad_prediccion = db.Column(db.Float)
-    id_sucursal = db.Column(db.Integer)
+    id_producto = db.Column(db.Integer, db.ForeignKey('Productos.id_producto'), nullable=False)
+    fecha_prediccion = db.Column(db.Date, nullable=False)
+    cantidad_prediccion = db.Column(db.Float, nullable=False)
+    id_sucursal = db.Column(db.Integer, db.ForeignKey('Sucursales.id_sucursal'), nullable=False)
+
+    # Relaciones
+    producto = db.relationship('Producto', back_populates='predicciones')
+    sucursal = db.relationship('Sucursal', back_populates='predicciones')
