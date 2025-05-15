@@ -3,11 +3,11 @@ from flask_jwt_extended import JWTManager, create_access_token
 from flask_jwt_extended import jwt_required
 from flask_jwt_extended import get_jwt_identity
 from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
-from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario, Venta, DetalleVenta, Sucursal # Importa tu base de datos y modelo de usuario
+from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario, Venta, DetalleVenta, Sucursal, PrediccionesIA # Importa tu base de datos y modelo de usuario
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
 from datetime import datetime
-
+from predicciones import generar_predicciones
 
 app = Flask(__name__)
 CORS(app, origins="http://localhost:3000")
@@ -641,6 +641,62 @@ def eliminar_sucursal(id_sucursal):
         db.session.rollback()
         print('Error al eliminar sucursal:', e)
         return jsonify({'error': 'No se pudo eliminar la sucursal'}), 500
+
+
+############################################ Modulo IA #####################################################
+
+@app.route("/generar_predicciones", methods=["POST"])
+def generar_predicciones_endpoint():
+    mensaje = generar_predicciones()
+    return {"mensaje": mensaje}, 200
+
+############################################## Modulo GET PREDICCIONES #####################################################
+
+@app.route('/predicciones', methods=['GET'])
+def obtener_predicciones():
+    """
+    Endpoint para obtener predicciones filtradas por:
+    - id_producto (opcional)
+    - id_sucursal (opcional, default 1)
+    - fecha_inicio (opcional, formato YYYY-MM-DD)
+    - fecha_fin (opcional, formato YYYY-MM-DD)
+    """
+    id_producto = request.args.get('id_producto', type=int)
+    id_sucursal = request.args.get('id_sucursal', default=1, type=int)
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+
+    query = db.session.query(PrediccionesIA).filter_by(id_sucursal=id_sucursal)
+
+    if id_producto:
+        query = query.filter(PrediccionesIA.id_producto == id_producto)
+
+    if fecha_inicio:
+        try:
+            fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+            query = query.filter(PrediccionesIA.fecha_prediccion >= fecha_inicio_dt)
+        except ValueError:
+            return jsonify({"error": "Formato de fecha_inicio inválido, debe ser YYYY-MM-DD"}), 400
+
+    if fecha_fin:
+        try:
+            fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d')
+            query = query.filter(PrediccionesIA.fecha_prediccion <= fecha_fin_dt)
+        except ValueError:
+            return jsonify({"error": "Formato de fecha_fin inválido, debe ser YYYY-MM-DD"}), 400
+
+    predicciones = query.order_by(PrediccionesIA.fecha_prediccion).all()
+
+    resultado = []
+    for p in predicciones:
+        resultado.append({
+            "id_producto": p.id_producto,
+            "fecha_prediccion": p.fecha_prediccion.strftime('%Y-%m-%d'),
+            "cantidad_prediccion": p.cantidad_prediccion,
+            "id_sucursal": p.id_sucursal
+        })
+
+    return jsonify(resultado)
 
 
 if __name__ == "__main__":

@@ -110,3 +110,13 @@ class Sucursal(db.Model):
 
     def __repr__(self):
         return f"<Sucursal {self.nombre}>"
+    
+
+class PrediccionesIA(db.Model):
+    __tablename__ = 'PrediccionesIA'
+
+    id_prediccion = db.Column(db.Integer, primary_key=True)
+    id_producto = db.Column(db.Integer)
+    fecha_prediccion = db.Column(db.Date)
+    cantidad_prediccion = db.Column(db.Float)
+    id_sucursal = db.Column(db.Integer)
