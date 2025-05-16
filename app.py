@@ -647,8 +647,8 @@ def eliminar_sucursal(id_sucursal):
 
 @app.route("/generar_predicciones", methods=["POST"])
 def generar_predicciones_endpoint():
-    mensaje = generar_predicciones()
-    return {"mensaje": mensaje}, 200
+    resultado = generar_predicciones()
+    return jsonify({"mensaje": resultado}), 200
 
 ############################################## Modulo GET PREDICCIONES #####################################################
 
