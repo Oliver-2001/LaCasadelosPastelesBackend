@@ -6,7 +6,8 @@ from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
 from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario, Venta, DetalleVenta, Sucursal, PrediccionesIA # Importa tu base de datos y modelo de usuario
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlalchemy import func, text
 from predicciones import generar_predicciones
 
 app = Flask(__name__)
@@ -709,6 +710,85 @@ def obtener_predicciones():
 
 
     return jsonify(resultado)
+
+
+############################################## Modulo INICIO #####################################################
+
+@app.route('/ventas/por-producto', methods=['GET'])
+def ventas_por_producto():
+    fecha_limite = datetime.now() - timedelta(days=30)
+    # Join entre DetalleVenta, Venta y Producto
+    resultados = (
+        db.session.query(
+            Producto.id_producto,
+            Producto.nombre,
+            func.sum(DetalleVenta.cantidad).label('cantidad_vendida')
+        )
+        .join(DetalleVenta, Producto.id_producto == DetalleVenta.id_producto)
+        .join(Venta, DetalleVenta.id_venta == Venta.id_venta)
+        .filter(Venta.fecha >= fecha_limite)
+        .group_by(Producto.id_producto, Producto.nombre)
+        .order_by(func.sum(DetalleVenta.cantidad).desc())
+        .all()
+    )
+
+    respuesta = []
+    for id_producto, nombre, cantidad_vendida in resultados:
+        respuesta.append({
+            'id_producto': id_producto,
+            'nombre_producto': nombre,
+            'cantidad': cantidad_vendida
+        })
+
+    return jsonify(respuesta)
+
+############################################### Modulo INICIO #####################################################
+
+@app.route('/ventas/diarias', methods=['GET'])
+def ventas_diarias():
+    fecha_limite = datetime.now() - timedelta(days=30)
+
+    resultados = (
+        db.session.query(
+            Venta.fecha,
+            func.sum(Venta.total).label('total_ventas')
+        )
+        .filter(Venta.fecha >= fecha_limite)
+        .group_by(Venta.fecha)
+        .order_by(Venta.fecha.asc())
+        .all()
+    )
+
+    respuesta = []
+    for fecha, total_ventas in resultados:
+        respuesta.append({
+            'fecha': fecha.strftime('%Y-%m-%d'),
+            'total_ventas': float(total_ventas)
+        })
+
+    return jsonify(respuesta)
+
+############################################### Modulo INICIO #####################################################
+
+@app.route('/productos/mas-vendidos', methods=['GET'])
+def productos_mas_vendidos():
+    sql = text("""
+        SELECT p.nombre, SUM(dv.cantidad) AS cantidad_vendida
+        FROM DetallesVenta dv
+        JOIN Productos p ON dv.id_producto = p.id_producto
+        GROUP BY p.nombre
+        ORDER BY cantidad_vendida DESC
+    """)
+    result = db.session.execute(sql).fetchall()
+
+    productos = []
+    for row in result:
+        productos.append({
+            "nombre": row.nombre,
+            "cantidad_vendida": int(row.cantidad_vendida)
+        })
+
+    return {"productos": productos}
 
 
 if __name__ == "__main__":

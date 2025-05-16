@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime   
+from sqlalchemy.orm import relationship
 
 db = SQLAlchemy()
 
@@ -53,7 +54,7 @@ class RolModulo(db.Model):
 
 
 class Producto(db.Model):
-    __tablename__ = 'Productos'  # Nombre de la tabla en la base de datos
+    __tablename__ = 'Productos'
 
     id_producto = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
@@ -61,7 +62,7 @@ class Producto(db.Model):
     stock = db.Column(db.Integer, nullable=False)
     categoria = db.Column(db.String(50), nullable=False)
 
-    predicciones = db.relationship('PrediccionesIA', back_populates='producto')
+    predicciones = db.relationship("PrediccionesIA", cascade="all, delete-orphan", back_populates="producto")
 
     def __init__(self, nombre, precio, stock, categoria):
         self.nombre = nombre
