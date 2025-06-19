@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file, render_template_string, make_response
 from flask_jwt_extended import JWTManager, create_access_token
 from flask_jwt_extended import jwt_required
 from flask_jwt_extended import get_jwt_identity
@@ -8,6 +8,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
 from datetime import datetime, timedelta
 from sqlalchemy import func, text
+from openpyxl import Workbook
+from weasyprint import HTML
+import io
 from predicciones import generar_predicciones
 
 app = Flask(__name__)
@@ -789,6 +792,219 @@ def productos_mas_vendidos():
         })
 
     return {"productos": productos}
+
+
+################################################## MODULO REPORTES #####################################################
+
+@app.route('/reporte/excel/ventas-producto', methods=['GET'])
+def reporte_excel_ventas_producto():
+    fecha_limite = datetime.now() - timedelta(days=30)
+
+    resultados = (
+        db.session.query(
+            Producto.nombre,
+            func.sum(DetalleVenta.cantidad).label('cantidad_vendida')
+        )
+        .join(DetalleVenta, Producto.id_producto == DetalleVenta.id_producto)
+        .join(Venta, DetalleVenta.id_venta == Venta.id_venta)
+        .filter(Venta.fecha >= fecha_limite)
+        .group_by(Producto.nombre)
+        .order_by(func.sum(DetalleVenta.cantidad).desc())
+        .all()
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ventas por Producto"
+
+    # Encabezados
+    ws.append(["Producto", "Cantidad Vendida"])
+
+    # Datos
+    for nombre, cantidad in resultados:
+        ws.append([nombre, cantidad])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="reporte_ventas_productos.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+############################################### Modulo Reportes #####################################################
+@app.route('/reporte/pdf/ventas-detalladas-diarias', methods=['GET'])
+def reporte_pdf_ventas_detalladas_diarias():
+    fecha_limite = datetime.now() - timedelta(days=30)
+
+    # Primero, obtenemos las fechas de ventas del último mes
+    fechas = (
+        db.session.query(Venta.fecha)
+        .filter(Venta.fecha >= fecha_limite)
+        .group_by(Venta.fecha)
+        .order_by(Venta.fecha.asc())
+        .all()
+    )
+    fechas = [f[0] for f in fechas]  # lista de fechas
+
+    datos_por_fecha = []
+
+    for fecha in fechas:
+        # Por cada fecha, obtener productos vendidos, cantidad y subtotal
+        detalles = (
+            db.session.query(
+                Producto.nombre,
+                func.sum(DetalleVenta.cantidad).label('cantidad_vendida'),
+                func.sum(DetalleVenta.cantidad * Producto.precio).label('total_producto')
+            )
+            .join(DetalleVenta, Producto.id_producto == DetalleVenta.id_producto)
+            .join(Venta, DetalleVenta.id_venta == Venta.id_venta)
+            .filter(Venta.fecha == fecha)
+            .group_by(Producto.nombre)
+            .all()
+        )
+
+        total_dia = sum(d.total_producto for d in detalles if d.total_producto is not None)
+
+        datos_por_fecha.append({
+            'fecha': fecha,
+            'detalles': detalles,
+            'total_dia': total_dia
+        })
+
+    # Plantilla HTML con Jinja2
+    html_template = """
+    <html>
+    <head>
+        <style>
+            body { font-family: sans-serif; }
+            table { border-collapse: collapse; width: 100%; margin-bottom: 30px;}
+            th, td { border: 1px solid #333; padding: 5px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            h2 { margin-bottom: 5px; }
+            .total { font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <h1>Reporte Detallado de Ventas Diarias (Últimos 30 días)</h1>
+        {% for dia in datos %}
+            <h2>Fecha: {{ dia.fecha.strftime('%Y-%m-%d') }}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th>Cantidad Vendida</th>
+                        <th>Total (Q)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for producto, cantidad, total in dia.detalles %}
+                    <tr>
+                        <td>{{ producto }}</td>
+                        <td>{{ cantidad }}</td>
+                        <td>{{ "%.2f"|format(total) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total">
+                        <td colspan="2">Total del Día</td>
+                        <td>{{ "%.2f"|format(dia.total_dia) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        {% endfor %}
+    </body>
+    </html>
+    """
+
+    html_rendered = render_template_string(html_template, datos=datos_por_fecha)
+    pdf = HTML(string=html_rendered).write_pdf()
+
+    response = make_response(pdf)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = 'attachment; filename=reporte_ventas_detalladas_diarias.pdf'
+    return response
+
+
+############################################### Modulo Reportes #####################################################
+@app.route('/reporte/excel/ventas-por-usuario', methods=['GET'])
+def reporte_excel_ventas_por_usuario():
+    fecha_limite = datetime.now() - timedelta(days=30)
+
+    resultados = (
+        db.session.query(
+            Usuario.nombre,
+            func.count(Venta.id_venta).label('cantidad_ventas'),
+            func.sum(Venta.total).label('total_vendido')
+        )
+        .join(Venta, Usuario.id_usuario == Venta.id_usuario)
+        .filter(Venta.fecha >= fecha_limite)
+        .group_by(Usuario.nombre)
+        .order_by(func.sum(Venta.total).desc())
+        .all()
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ventas por Usuario"
+
+    ws.append(["Usuario", "Cantidad de Ventas", "Total Vendido (Q)"])
+
+    for nombre, cantidad, total in resultados:
+        ws.append([nombre, cantidad, float(total)])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="reporte_ventas_usuarios.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+############################################### Modulo Reportes #####################################################
+@app.route('/reporte/excel/insumos-detallado-por-mes', methods=['GET'])
+def reporte_excel_insumos_detallado_por_mes():
+    # Obtenemos todos los insumos ordenados por mes
+    resultados = (
+        db.session.query(
+            Inventario.nombre,
+            Inventario.cantidad,
+            Inventario.unidad,
+            Inventario.fecha_actualizacion
+        )
+        .order_by(Inventario.fecha_actualizacion)
+        .all()
+    )
+
+    # Creamos libro Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Insumos por Mes"
+
+    # Encabezado
+    ws.append(["Mes", "Nombre del Insumo", "Cantidad", "Unidad"])
+
+    # Datos
+    for nombre, cantidad, unidad, fecha in resultados:
+        mes = fecha.strftime('%Y-%m')
+        ws.append([mes, nombre, cantidad, unidad])
+
+    # Guardar y enviar
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="reporte_insumos_por_mes_detallado.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 if __name__ == "__main__":
