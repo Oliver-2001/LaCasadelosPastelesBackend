@@ -508,6 +508,86 @@ def crear_venta():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
     
+ ############################################ (Crear PDF DE LA VENTA) Modulo VENTAS #####################################################
+
+@app.route('/ventas/<int:id_venta>/reporte-pdf', methods=['GET'])
+def reporte_pdf_venta(id_venta):
+    venta = Venta.query.get(id_venta)
+    if not venta:
+        return jsonify({'error': 'Venta no encontrada'}), 404
+
+    usuario = Usuario.query.get(venta.id_usuario)
+    detalles = (
+        db.session.query(
+            Producto.nombre,
+            DetalleVenta.cantidad,
+            Producto.precio,
+            DetalleVenta.subtotal
+        )
+        .join(Producto, Producto.id_producto == DetalleVenta.id_producto)
+        .filter(DetalleVenta.id_venta == id_venta)
+        .all()
+    )
+
+    html_template = """
+    <html>
+    <head>
+        <style>
+            body { font-family: sans-serif; }
+            table { border-collapse: collapse; width: 100%; margin-top: 20px;}
+            th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            h2, h3 { margin-bottom: 5px; }
+        </style>
+    </head>
+    <body>
+        <h2>Reporte de Venta</h2>
+        <p><strong>Fecha y hora:</strong> {{ venta.fecha.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        <p><strong>Registrado por:</strong> {{ usuario.nombre if usuario else 'Desconocido' }}</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Precio Unitario (Q)</th>
+                    <th>Subtotal (Q)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for nombre, cantidad, precio, subtotal in detalles %}
+                <tr>
+                    <td>{{ nombre }}</td>
+                    <td>{{ cantidad }}</td>
+                    <td>{{ "%.2f"|format(precio) }}</td>
+                    <td>{{ "%.2f"|format(subtotal) }}</td>
+                </tr>
+                {% endfor %}
+                <tr>
+                    <td colspan="3" style="text-align: right; font-weight: bold;">Total</td>
+                    <td>{{ "%.2f"|format(venta.total) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </body>
+    </html>
+    """
+
+    html_rendered = render_template_string(
+        html_template,
+        venta=venta,
+        usuario=usuario,
+        detalles=detalles
+    )
+
+    pdf = HTML(string=html_rendered).write_pdf()
+
+    response = make_response(pdf)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename=reporte_venta_{id_venta}.pdf'
+    return response
+
+
 
 ############################################ LISTAR VENTAS #####################################################
 @app.route('/ventas', methods=['GET'])
