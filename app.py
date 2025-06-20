@@ -6,11 +6,18 @@ from config import SQLALCHEMY_DATABASE_URI  # Importa la URI de conexión
 from models import db, Usuario, Rol, Modulo, RolModulo, Producto, Inventario, Venta, DetalleVenta, Sucursal, PrediccionesIA # Importa tu base de datos y modelo de usuario
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy import func, text
 from openpyxl import Workbook
 from weasyprint import HTML
 import io
+from reportlab.lib.pagesizes import letter
+from io import BytesIO
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle, SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 from predicciones import generar_predicciones
 
 app = Flask(__name__)
@@ -450,11 +457,12 @@ def crear_insumo():
 ############################################ (Crear) Modulo VENTAS #####################################################
 
 @app.route('/ventas', methods=['POST'])
+@jwt_required()
 def crear_venta():
     try:
         data = request.json
         detalles = data.get('detalles', [])
-        id_usuario = data.get('id_usuario')
+        id_usuario = get_jwt_identity()
 
         if not detalles or not id_usuario:
             return jsonify({'mensaje': 'Faltan datos obligatorios (detalles o id_usuario).'}), 400
@@ -658,7 +666,75 @@ def obtener_detalle_venta(id_venta):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+############################################## Reporte de ventas del día (VENTAS)#####################################################
 
+@app.route("/reporte-ventas-dia", methods=["GET"])
+@jwt_required()
+def reporte_ventas_dia():
+    hoy = date.today()
+    inicio_dia = datetime.combine(hoy, datetime.min.time())
+    fin_dia = datetime.combine(hoy, datetime.max.time())
+
+    ventas = Venta.query.filter(Venta.fecha.between(inicio_dia, fin_dia)).all()
+    if not ventas:
+        return jsonify({"message": "No hay ventas registradas hoy."}), 404
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Título
+    title = Paragraph("📋 <b>Reporte de Ventas del Día</b>", styles['Title'])
+    date_info = Paragraph(f"📅 Fecha: {hoy.strftime('%d/%m/%Y')}", styles['Normal'])
+    elements.extend([title, Spacer(1, 12), date_info, Spacer(1, 20)])
+
+    # Encabezado de la tabla
+    data = [["Fecha", "Producto", "Cantidad", "Subtotal (Q)"]]
+    total_general = 0
+
+    for venta in ventas:
+        detalles = DetalleVenta.query.filter_by(id_venta=venta.id_venta).all()
+        for detalle in detalles:
+            producto = Producto.query.get(detalle.id_producto)
+            fila = [
+                venta.fecha.strftime("%d/%m/%Y %H:%M"),
+                producto.nombre,
+                detalle.cantidad,
+                f"Q{detalle.subtotal:.2f}"
+            ]
+            data.append(fila)
+            total_general += detalle.subtotal
+
+    # Estilo de tabla
+    tabla = Table(data, colWidths=[120, 200, 80, 100])
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.orange),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+    ]))
+
+    elements.append(tabla)
+    elements.append(Spacer(1, 20))
+
+    # Total
+    total_text = Paragraph(f"<b>TOTAL VENDIDO HOY:</b> Q{total_general:.2f}", styles["Heading2"])
+    elements.append(total_text)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="reporte_ventas_dia.pdf",
+        mimetype="application/pdf"
+    )   
 
 
 ################################################################## Modulo Sucursales ##############################################################
