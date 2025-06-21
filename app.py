@@ -805,10 +805,10 @@ def eliminar_sucursal(id_sucursal):
 
 ############################################ Modulo IA #####################################################
 
-@app.route("/generar_predicciones", methods=["POST"])
-def generar_predicciones_endpoint():
+@app.route('/generar_predicciones', methods=['POST'])
+def generar():
     resultado = generar_predicciones()
-    return jsonify({"mensaje": resultado}), 200
+    return jsonify({'mensaje': resultado})
 
 ############################################## Modulo GET PREDICCIONES #####################################################
 
